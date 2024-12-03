@@ -18,7 +18,15 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    val apiKey: String = project.findProperty("API_KEY") as String? ?: ""
+    val androidApiKey: String = project.findProperty("ANDROID_API_KEY") as String? ?: ""
+
     buildTypes {
+        debug {
+            buildConfigField("String", "REMOTE_API_URL", "\"$apiKey\"")
+            buildConfigField("String", "ANDROID_API_KEY", "\"$androidApiKey\"")
+        }
+
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -36,6 +44,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -49,6 +58,17 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.navigation:navigation-compose:2.8.4")
+
+    // Retrofit with Gson serialization converter
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+
+    // OkHttp3
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
