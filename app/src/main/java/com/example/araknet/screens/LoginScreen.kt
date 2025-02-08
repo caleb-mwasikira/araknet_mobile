@@ -1,5 +1,6 @@
 package com.example.araknet.screens
 
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -8,19 +9,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedButton
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,19 +27,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.araknet.MainActivity
 import com.example.araknet.R
 import com.example.araknet.data.AuthError
 import com.example.araknet.data.AuthState
 import com.example.araknet.data.AuthViewModel
 import com.example.araknet.ui.theme.AraknetTheme
+import com.example.araknet.utils.titlecase
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 @Composable
@@ -63,52 +67,26 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceEvenly
         ) {
-            LoginHeader()
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = "Login",
+                    style = TextStyle(
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                )
+                Text(
+                    text = "Welcome Back!",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+
             LoginForm(
                 navigateToSignup = navigateToSignup,
                 navigateToHomePage = navigateToHomePage,
-            )
-        }
-    }
-}
-
-@Composable
-fun LoginHeader(
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Column {
-            Text(
-                text = "Get Started Now",
-                style = MaterialTheme.typography.titleLarge
-            )
-            Text(
-                text = "Enter your credentials to access your account",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.surfaceTint,
-            )
-        }
-
-        // ----- or -----
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            HorizontalDivider(
-                modifier = Modifier.weight(1f)
-            )
-
-            Text(
-                text = "or",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.surfaceTint,
-            )
-
-            HorizontalDivider(
-                modifier = Modifier.weight(1f)
             )
         }
     }
@@ -124,31 +102,61 @@ fun LoginForm(
     val context = LocalContext.current
 
     Column(
-        modifier = modifier
-            .fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        val errors = buildList<AuthError> {
-            addAll(authViewModel.fieldErrors)
-            addAll(authViewModel.serverErrors)
+        var authError by remember { mutableStateOf<AuthError?>(null) }
+        val authState by authViewModel.authState.collectAsState()
+
+        // Runs when authState changes
+        LaunchedEffect(authState) {
+            if (authState == AuthState.Success) {
+                val message: String = "Login successful. Redirecting to Home Page"
+                Log.d(MainActivity.TAG, message)
+
+                Toast.makeText(context, message, Toast.LENGTH_LONG)
+                    .show()
+
+                // Delay for a few seconds for user to read Toast message
+                delay(1000)
+                navigateToHomePage()
+            }
         }
 
-        if (errors.isNotEmpty()) {
-            val errMessage = errors.first().errMessage
-            ErrMessage(errMessage = errMessage)
+        LaunchedEffect(Unit) {
+            authViewModel.authErrors.collectLatest { error ->
+                authError = error
+
+                launch {
+                    delay(5000)  // Hide after n seconds
+                    authError = null
+                }
+            }
         }
 
-        FormInputField(
+        LaunchedEffect(Unit) {
+            authViewModel.connectionErrors.collect { error ->
+                Toast.makeText(context, error.errMessage.titlecase(), Toast.LENGTH_LONG)
+                    .show()
+            }
+        }
+
+        authError?.let {
+            ErrorMessage(it.errMessage.titlecase())
+        }
+
+        InputField(
             labelText = "Email Address",
             value = authViewModel.email,
             onValueChanged = { newValue ->
                 authViewModel.email = newValue
             },
+            leadingIconId = R.drawable.mail_24dp,
             keyboardType = KeyboardType.Email,
         )
 
-        FormPasswordField(
+        PasswordField(
             labelText = "Password",
             value = authViewModel.password,
             onValueChanged = { newValue ->
@@ -157,153 +165,48 @@ fun LoginForm(
             displayForgotPassword = true,
         )
 
-        ElevatedButton(
-            onClick = {
-                runBlocking {
-                    authViewModel.loginUser()
-
-                    if (authViewModel.authState == AuthState.Success) {
-                        Toast.makeText(
-                            context,
-                            "Login success",
-                            Toast.LENGTH_LONG
-                        ).show()
-
-                        navigateToHomePage()
-                        return@runBlocking
-                    }
-
-                    //
-                    authViewModel.connectionErrors.forEach { error ->
-                        Toast.makeText(
-                            context,
-                            error.errMessage,
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 24.dp),
-            shape = MaterialTheme.shapes.small,
-            colors = ButtonDefaults.buttonColors().copy(
-                containerColor = MaterialTheme.colorScheme.primary,
-            )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                text = "Login",
-                modifier = Modifier.padding(vertical = 8.dp),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-
-        Row(
-            horizontalArrangement = Arrangement.Start,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Don't have an account?",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-
-            Surface(
-                onClick = { navigateToSignup() },
-                modifier = Modifier.padding(0.dp),
+            ElevatedButton(
+                onClick = {
+                    runBlocking {
+                        authViewModel.loginUser()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp),
+                colors = ButtonDefaults.buttonColors().copy(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                ),
+                shape = CircleShape
             ) {
                 Text(
-                    text = " Register",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
+                    text = "Login",
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    style = MaterialTheme.typography.bodyLarge,
                 )
             }
-        }
-    }
-}
 
-@Composable
-fun FormInputField(
-    labelText: String,
-    value: String,
-    onValueChanged: (String) -> Unit,
-    keyboardType: KeyboardType = KeyboardType.Text,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChanged,
-        modifier = Modifier
-            .fillMaxWidth(),
-        textStyle = MaterialTheme.typography.bodyLarge,
-        label = {
-            Text(
-                text = labelText,
-                style = MaterialTheme.typography.labelLarge
-            )
-        },
-        keyboardOptions = KeyboardOptions.Default.copy(
-            keyboardType = keyboardType
-        ),
-        shape = MaterialTheme.shapes.medium
-    )
-}
-
-@Composable
-fun FormPasswordField(
-    labelText: String,
-    value: String,
-    onValueChanged: (String) -> Unit,
-    displayForgotPassword: Boolean = false,
-) {
-    var passwordVisible: Boolean by remember { mutableStateOf(false) }
-
-    Column(
-        verticalArrangement = Arrangement.Bottom,
-    ) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChanged,
-            modifier = Modifier
-                .fillMaxWidth(),
-            label = {
+            Row(
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    text = labelText,
-                    style = MaterialTheme.typography.labelLarge
+                    text = "Don't have an account?",
+                    style = MaterialTheme.typography.bodyLarge,
                 )
-            },
-            textStyle = MaterialTheme.typography.bodyLarge,
-            keyboardOptions = KeyboardOptions.Default.copy(
-                keyboardType = KeyboardType.Password
-            ),
-            singleLine = true,
-            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = {
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(
-                        painter = painterResource(id = if (passwordVisible) R.drawable.visibility_off else R.drawable.visibility),
-                        contentDescription = "display password",
-                        tint = MaterialTheme.colorScheme.surfaceTint,
+
+                TextButton(onClick = { navigateToSignup() }) {
+                    Text(
+                        text = "Register",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        textDecoration = TextDecoration.Underline,
                     )
                 }
-            },
-            shape = MaterialTheme.shapes.medium
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            // display error messages here
-            Text(text = "")
-
-            if (displayForgotPassword) {
-                Text(
-                    text = "Forgot Password?",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                )
             }
         }
     }
@@ -313,9 +216,6 @@ fun FormPasswordField(
 @Composable
 fun PreviewLoginScreen() {
     AraknetTheme {
-        LoginScreen(
-            navigateToSignup = {},
-            navigateToHomePage = {}
-        )
+        LoginScreen(navigateToSignup = {}, navigateToHomePage = {})
     }
 }

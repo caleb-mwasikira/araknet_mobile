@@ -18,15 +18,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    val apiKey: String = project.findProperty("API_KEY") as String? ?: ""
-    val androidApiKey: String = project.findProperty("ANDROID_API_KEY") as String? ?: ""
-
     buildTypes {
-        debug {
-            buildConfigField("String", "REMOTE_API_URL", "\"$apiKey\"")
-            buildConfigField("String", "ANDROID_API_KEY", "\"$androidApiKey\"")
-        }
-
         release {
             isMinifyEnabled = false
             proguardFiles(

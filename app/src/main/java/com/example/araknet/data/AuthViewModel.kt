@@ -5,9 +5,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
-import com.example.araknet.utils.titlecase
+import androidx.lifecycle.viewModelScope
+import com.example.araknet.MainActivity
 import com.google.gson.GsonBuilder
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.launch
 import java.io.IOException
 
 sealed class AuthError {
@@ -27,7 +31,6 @@ enum class AuthState {
 
 class AuthViewModel : ViewModel() {
     companion object {
-        const val TAG = "AuthViewModel"
         private const val MIN_NAME_LENGTH = 3
         private const val MIN_PASSWORD_LENGTH = 6
     }
@@ -37,194 +40,177 @@ class AuthViewModel : ViewModel() {
     var password by mutableStateOf("")
     var agreedToTerms by mutableStateOf(false)
 
-    var authState by mutableStateOf(AuthState.Idle)
+    var authState = MutableStateFlow(AuthState.Idle)
         private set
 
-    private var authErrors by mutableStateOf(listOf<AuthError>())
-    val fieldErrors
-        get() = authErrors.filterIsInstance<AuthError.FieldError>()
-    val connectionErrors
-        get() = authErrors.filterIsInstance<AuthError.ConnectionError>()
-    val serverErrors
-        get() = authErrors.filterIsInstance<AuthError.ServerError>()
+    private val _authErrors = MutableSharedFlow<AuthError>(extraBufferCapacity = 1)
+    val authErrors = _authErrors.asSharedFlow()
 
-    fun loginUser() {
-        authErrors = validateLogin()
-        if (authErrors.isNotEmpty()) {
-            return
+    private val _connectionErrors = MutableSharedFlow<AuthError.ConnectionError>(extraBufferCapacity = 1)
+    val connectionErrors = _connectionErrors.asSharedFlow()
+
+    // TODO: check internet connection before sending auth requests
+
+    fun loginUser() = viewModelScope.launch {
+        Log.d(MainActivity.TAG, "Attempting user login")
+
+        // Validate login form
+        val loginErrors: List<AuthError> = buildList<AuthError?> {
+            add(validateEmail(email))
+            add(validatePassword(password))
+        }.filterNotNull()
+
+        if (loginErrors.isNotEmpty()) {
+            Log.d(MainActivity.TAG, "Login failed. Validation errors; $loginErrors")
+            loginErrors
+                .reversed() // Reversing this list so that the topmost field error is shown first
+                .forEach { error -> _authErrors.emit(error) }
+            return@launch
         }
 
-        Log.d(TAG, "Attempting user login")
-        authState = AuthState.Loading
+        authState.value = AuthState.Loading
 
-        runBlocking {
-            try {
-                val credentials = LoginCredentials(email = email, password = password)
-                val httpResponse = Api.retrofitService.loginUser(credentials)
+        try {
+            val credentials = LoginCredentials(email = email, password = password)
+            val httpResponse = Api.retrofitService.loginUser(credentials)
 
-                val responseBody: LoginResponse = httpResponse.body() ?: let {
-                    val jsonResponse = httpResponse.errorBody()?.string()
-                    if (jsonResponse == null) {
-                        LoginResponse("Internal Server Error")
-                    }
+            val responseBody: LoginResponse = httpResponse.body() ?: let {
+                val jsonResponse = httpResponse.errorBody()?.string()
+                    ?: return@let LoginResponse("Internal Server Error")
 
-                    val gsonBuilder = GsonBuilder().create()
-                    val loginResponse = gsonBuilder.fromJson(jsonResponse, LoginResponse::class.java)
-                    loginResponse
-                }
-                Log.d(TAG, "Login server response; $httpResponse\nBody: $responseBody")
-
-                if (httpResponse.isSuccessful) {
-                    Log.d(TAG, "Login success")
-                    authState = AuthState.Success
-
-                    // TODO: save jwt received from server in local storage
-
-                } else {
-                    // Handle unsuccessful responses
-                    Log.d(TAG, "Login failed")
-                    authState = AuthState.Error
-
-                    authErrors = listOf(
-                        AuthError.ServerError(responseBody.message)
-                    )
-                }
-            } catch (e: IOException) {
-                // Handle connection errors
-                Log.d(TAG, "Login failed; Connection error; ${e.message}")
-                authState = AuthState.Error
-                authErrors = listOf(AuthError.ConnectionError())
+                val gsonBuilder = GsonBuilder().create()
+                val loginResponse = gsonBuilder.fromJson(jsonResponse, LoginResponse::class.java)
+                loginResponse
             }
-        }
 
-        Log.d(TAG, "Auth errors; $authErrors")
-    }
+            Log.d(MainActivity.TAG, "Login HTTP response; $httpResponse")
+            Log.d(MainActivity.TAG, "Login HTTP body; $responseBody")
 
-    fun registerUser() {
-        authErrors = validateRegister()
+            if (httpResponse.isSuccessful) {
+                Log.d(MainActivity.TAG, "Login success")
+                authState.value = AuthState.Success
 
-        if (authErrors.isNotEmpty()) {
-            return
-        }
+                // TODO: save jwt received from server in local storage
 
-        // attempt user registration
-        Log.d(TAG, "Attempting user registration")
-        authState = AuthState.Loading
-
-        runBlocking {
-            try {
-                val credentials = RegisterCredentials(
-                    username = username,
-                    email = email,
-                    password = password
+            } else {
+                // Handle unsuccessful responses
+                Log.d(MainActivity.TAG, "Login failed")
+                authState.value = AuthState.Error
+                _authErrors.emit(
+                    AuthError.ServerError(responseBody.message)
                 )
-                val httpResponse = Api.retrofitService.registerUser(credentials)
-                val responseBody: RegisterResponse = httpResponse.body() ?: let {
-                    val jsonResponse = httpResponse.errorBody()?.string()
-                        ?: return@let RegisterResponse("Internal Server Error")
-
-                    val gsonBuilder = GsonBuilder().create()
-                    val registerResponse = gsonBuilder.fromJson(jsonResponse, RegisterResponse::class.java)
-                    registerResponse
-                }
-                Log.d(TAG, "Register server response; $httpResponse\nBody: $responseBody")
-
-                if (httpResponse.isSuccessful) {
-                    Log.d(TAG, "Registration success")
-                    authState = AuthState.Success
-
-                } else {
-                    // Handle unsuccessful responses
-                    Log.d(TAG, "Registration failed")
-                    authState = AuthState.Error
-                    authErrors = listOf(
-                        AuthError.ServerError(responseBody.message)
-                    )
-                }
-
-            } catch (e: IOException) {
-                // Handle connection errors
-                Log.d(TAG, "Registration failed; Connection error; ${e.message}")
-                authState = AuthState.Error
-                authErrors = listOf(AuthError.ConnectionError())
             }
-
+        } catch (e: IOException) {
+            // Handle connection errors
+            Log.d(MainActivity.TAG, "Login failed. Connection error; ${e.message}")
+            authState.value = AuthState.Error
+            _connectionErrors.emit(
+                AuthError.ConnectionError()
+            )
         }
-
-        Log.d(TAG, "Auth errors; $authErrors")
     }
 
-    private fun validateLogin(): MutableList<AuthError> {
-        return buildList {
-            addAll(validateEmail())
-            addAll(validatePassword())
-        }.toMutableList()
-    }
+    fun registerUser() = viewModelScope.launch {
+        Log.d(MainActivity.TAG, "Attempting user registration")
 
-    private fun validateRegister(): MutableList<AuthError> {
-        return buildList {
-            addAll(validateString("username", username))
-            addAll(validateEmail())
-            addAll(validatePassword())
+        // Validate register form
+        val registrationErrors: List<AuthError> = buildList<AuthError?> {
+            add(validateUsername(username))
+            add(validateEmail(email))
+            add(validatePassword(password))
 
             if (!agreedToTerms) {
                 add(
                     AuthError.FieldError(
-                        "terms",
-                        "You must agree to terms and conditions before continuing"
+                        "terms", "You must agree to terms and conditions before continuing"
                     )
                 )
             }
-        }.toMutableList()
+        }.filterNotNull()
+
+        if (registrationErrors.isNotEmpty()) {
+            Log.d(MainActivity.TAG, "Registration failed. Validation errors; $registrationErrors")
+            registrationErrors
+                .reversed() // Reversing this list so that the topmost field error is shown first
+                .forEach { error -> _authErrors.emit(error) }
+            return@launch
+        }
+
+        authState.value = AuthState.Loading
+
+        try {
+            val credentials = RegisterCredentials(
+                username = username, email = email, password = password
+            )
+            val httpResponse = Api.retrofitService.registerUser(credentials)
+            val responseBody: RegisterResponse = httpResponse.body() ?: let {
+                val jsonResponse = httpResponse.errorBody()?.string()
+                    ?: return@let RegisterResponse("Internal Server Error")
+
+                val gsonBuilder = GsonBuilder().create()
+                val registerResponse =
+                    gsonBuilder.fromJson(jsonResponse, RegisterResponse::class.java)
+                registerResponse
+            }
+
+            Log.d(MainActivity.TAG, "Register HTTP response; $httpResponse")
+            Log.d(MainActivity.TAG, "Register HTTP body; $responseBody")
+
+            if (httpResponse.isSuccessful) {
+                Log.d(MainActivity.TAG, "Registration success")
+                authState.value = AuthState.Success
+
+            } else {
+                // Handle unsuccessful responses
+                Log.d(MainActivity.TAG, "Registration failed")
+                authState.value = AuthState.Error
+                _authErrors.emit(
+                    AuthError.ServerError(responseBody.message)
+                )
+            }
+
+        } catch (e: IOException) {
+            // Handle connection errors
+            Log.d(MainActivity.TAG, "Registration failed. Connection error; ${e.message}")
+            authState.value = AuthState.Error
+            _connectionErrors.emit(
+                AuthError.ConnectionError()
+            )
+        }
     }
 
-    private fun validateEmail(): List<AuthError> {
-        val emailErrors = mutableListOf<AuthError>()
-
+    private fun validateEmail(email: String): AuthError? {
         if (email.isEmpty()) {
-            emailErrors.add(
-                AuthError.FieldError("email", "Email cannot be empty")
-            )
+            return AuthError.FieldError("email", "Email cannot be empty")
         }
 
         val emailRegex = Regex("[\\w-.]+@([\\w-]+\\.)+[\\w-]{2,4}")
         if (!emailRegex.matches(email)) {
-            emailErrors.add(
-                AuthError.FieldError("email", "Invalid email format")
-            )
+            return AuthError.FieldError("email", "Invalid email format")
+
         }
-        return emailErrors
+        return null
     }
 
-    private fun validatePassword(): List<AuthError> {
-        val passwordErrors = mutableListOf<AuthError>()
-
+    private fun validatePassword(password: String): AuthError? {
         if (password.length < MIN_PASSWORD_LENGTH) {
-            passwordErrors.add(
-                AuthError.FieldError(
-                    "password",
-                    "Password cannot be less than $MIN_PASSWORD_LENGTH characters long"
-                )
+            return AuthError.FieldError(
+                "password", "Password cannot be less than $MIN_PASSWORD_LENGTH characters long"
             )
         }
 
         // TODO: check password strength
-
-        return passwordErrors
+        return null
     }
 
-    private fun validateString(fieldName: String, value: String): List<AuthError> {
-        val errors = mutableListOf<AuthError>()
-
-        if (value.length < MIN_NAME_LENGTH) {
-            errors.add(
-                AuthError.FieldError(
-                    fieldName,
-                    "${fieldName.titlecase()} cannot be less than $MIN_NAME_LENGTH characters long"
-                )
+    private fun validateUsername(username: String): AuthError? {
+        if (username.length < MIN_NAME_LENGTH) {
+            return AuthError.FieldError(
+                "username",
+                "Username too short. Minimum of $MIN_NAME_LENGTH characters acceptable"
             )
         }
-        return errors
+        return null
     }
 
 }

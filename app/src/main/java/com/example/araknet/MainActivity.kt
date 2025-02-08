@@ -1,6 +1,7 @@
 package com.example.araknet
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -18,6 +19,10 @@ import com.example.araknet.screens.Routes
 import com.example.araknet.ui.theme.AraknetTheme
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        const val TAG: String = "Araknet"
+    }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -28,7 +33,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     NavHost(
                         navController = navController,
-                        startDestination = Routes.HomeScreen.name,
+                        startDestination = Routes.RegisterScreen.name,
                         modifier = Modifier.padding(innerPadding),
                     ) {
                         composable(route = Routes.LoginScreen.name) {
