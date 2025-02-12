@@ -8,9 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.MaterialTheme
@@ -52,7 +50,16 @@ fun LoginScreen(
     navigateToSignup: () -> Unit,
     navigateToHomePage: () -> Unit,
 ) {
-    val scrollState = rememberScrollState()
+    val isConnected by MainActivity.networkMonitor.isConnected.collectAsState()
+    val context = LocalContext.current
+
+    // Run once when screen is first composed
+    LaunchedEffect(isConnected) {
+        if (!isConnected) {
+            Toast.makeText(context, "No Internet Connection", Toast.LENGTH_LONG)
+                .show()
+        }
+    }
 
     Scaffold(
         modifier = Modifier
@@ -62,8 +69,7 @@ fun LoginScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(scrollState, enabled = true),
+                .padding(innerPadding),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceEvenly
         ) {
@@ -87,6 +93,7 @@ fun LoginScreen(
             LoginForm(
                 navigateToSignup = navigateToSignup,
                 navigateToHomePage = navigateToHomePage,
+                isConnected = isConnected,
             )
         }
     }
@@ -97,6 +104,7 @@ fun LoginForm(
     modifier: Modifier = Modifier,
     navigateToSignup: () -> Unit,
     navigateToHomePage: () -> Unit,
+    isConnected: Boolean = false,
     authViewModel: AuthViewModel = viewModel(),
 ) {
     val context = LocalContext.current
@@ -168,8 +176,25 @@ fun LoginForm(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            val containerColor = if (isConnected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.surfaceContainer
+            }
+            val contentColor = if (isConnected) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            }
+
             ElevatedButton(
                 onClick = {
+                    if (!isConnected) {
+                        Toast.makeText(context, "No Internet Connection", Toast.LENGTH_LONG)
+                            .show()
+                        return@ElevatedButton
+                    }
+
                     runBlocking {
                         authViewModel.loginUser()
                     }
@@ -178,7 +203,8 @@ fun LoginForm(
                     .fillMaxWidth()
                     .padding(top = 24.dp),
                 colors = ButtonDefaults.buttonColors().copy(
-                    containerColor = MaterialTheme.colorScheme.primary,
+                    containerColor = containerColor,
+                    contentColor = contentColor,
                 ),
                 shape = CircleShape
             ) {

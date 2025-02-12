@@ -19,7 +19,7 @@ sealed class AuthError {
 
     data class FieldError(val fieldName: String, override val errMessage: String) : AuthError()
     data class ConnectionError(
-        override val errMessage: String = "Connection Error. Please check your internet connection and try again"
+        override val errMessage: String = "Server currently unavailable. Please try again later"
     ) : AuthError()
 
     data class ServerError(override val errMessage: String) : AuthError()

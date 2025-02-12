@@ -50,6 +50,17 @@ import kotlinx.coroutines.runBlocking
 fun RegisterScreen(
     navigateToLogin: () -> Unit
 ) {
+    val isConnected by MainActivity.networkMonitor.isConnected.collectAsState()
+    val context = LocalContext.current
+
+    // Run once when screen is first composed
+    LaunchedEffect(isConnected) {
+        if(!isConnected) {
+            Toast.makeText(context, "No Internet Connection", Toast.LENGTH_LONG)
+                .show()
+        }
+    }
+
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
@@ -79,7 +90,8 @@ fun RegisterScreen(
             }
 
             RegisterForm(
-                navigateToLogin = navigateToLogin
+                navigateToLogin = navigateToLogin,
+                isConnected = isConnected,
             )
         }
     }
@@ -89,6 +101,7 @@ fun RegisterScreen(
 fun RegisterForm(
     modifier: Modifier = Modifier,
     navigateToLogin: () -> Unit,
+    isConnected: Boolean = false,
     authViewModel: AuthViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -185,8 +198,25 @@ fun RegisterForm(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            val containerColor = if (isConnected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.surfaceContainer
+            }
+            val contentColor = if (isConnected) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            }
+
             ElevatedButton(
                 onClick = {
+                    if (!isConnected) {
+                        Toast.makeText(context, "No Internet Connection", Toast.LENGTH_LONG)
+                            .show()
+                        return@ElevatedButton
+                    }
+
                     runBlocking {
                         authViewModel.registerUser()
                     }
@@ -195,7 +225,8 @@ fun RegisterForm(
                     .fillMaxWidth()
                     .padding(top = 24.dp),
                 colors = ButtonDefaults.buttonColors().copy(
-                    containerColor = MaterialTheme.colorScheme.primary,
+                    containerColor = containerColor,
+                    contentColor = contentColor,
                 ),
                 shape = CircleShape
             ) {
