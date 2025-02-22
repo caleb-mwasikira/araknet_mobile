@@ -1,6 +1,5 @@
 package com.example.araknet
 
-import android.net.Network
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -9,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -23,12 +21,11 @@ import com.example.araknet.ui.theme.AraknetTheme
 class MainActivity : ComponentActivity() {
     companion object {
         const val TAG: String = "Araknet"
-        lateinit var networkMonitor: NetworkMonitor
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        networkMonitor = NetworkMonitor(this)
+        val networkMonitor = NetworkMonitor(this)
 
         enableEdgeToEdge()
         setContent {
@@ -38,7 +35,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     NavHost(
                         navController = navController,
-                        startDestination = Routes.RegisterScreen.name,
+                        startDestination = Routes.LoginScreen.name,
                         modifier = Modifier.padding(innerPadding),
                     ) {
                         composable(route = Routes.LoginScreen.name) {
@@ -50,7 +47,8 @@ class MainActivity : ComponentActivity() {
                                     navController.navigate(
                                         route = Routes.HomeScreen.name
                                     )
-                                }
+                                },
+                                networkMonitor = networkMonitor,
                             )
                         }
 
@@ -58,7 +56,8 @@ class MainActivity : ComponentActivity() {
                             RegisterScreen(
                                 navigateToLogin = {
                                     navController.navigate(route = Routes.LoginScreen.name)
-                                }
+                                },
+                                networkMonitor = networkMonitor,
                             )
                         }
 

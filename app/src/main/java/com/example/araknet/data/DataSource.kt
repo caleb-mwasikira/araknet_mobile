@@ -45,7 +45,7 @@ data class LoginCredentials(
 
 data class LoginResponse(
     val message: String,
-    @SerializedName("jwt_token") val jwtToken: String? = null
+    @SerializedName("data") val jwtToken: String? = null
 )
 
 data class RegisterCredentials(

@@ -9,11 +9,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.araknet.MainActivity
 import com.example.araknet.R
@@ -44,9 +46,7 @@ fun InputField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChanged,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
+        modifier = Modifier.fillMaxWidth(),
         textStyle = MaterialTheme.typography.bodyLarge,
         leadingIcon = {
             // Display leading icon if leadingIconId is not null
@@ -66,7 +66,7 @@ fun InputField(
         keyboardOptions = KeyboardOptions.Default.copy(
             keyboardType = keyboardType
         ),
-        shape = RoundedCornerShape(4.dp),
+        shape = RoundedCornerShape(8.dp),
         singleLine = true,
     )
 }
@@ -86,9 +86,7 @@ fun PasswordField(
         OutlinedTextField(
             value = value,
             onValueChange = onValueChanged,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp),
+            modifier = Modifier.fillMaxWidth(),
             textStyle = MaterialTheme.typography.bodyLarge,
             leadingIcon = {
                 Icon(
@@ -120,7 +118,7 @@ fun PasswordField(
             keyboardOptions = KeyboardOptions.Default.copy(
                 keyboardType = KeyboardType.Password
             ),
-            shape = RoundedCornerShape(4.dp),
+            shape = RoundedCornerShape(8.dp),
             singleLine = true,
         )
 
@@ -144,18 +142,30 @@ fun PasswordField(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ErrorMessage(message: String) {
-    Snackbar(
-        containerColor = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        shape = RoundedCornerShape(4.dp),
-        modifier = Modifier.padding(vertical = 4.dp, horizontal = 12.dp),
+fun ErrorMessage(
+    message: String,
+    onDismissRequest: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        containerColor = MaterialTheme.colorScheme.error.copy(
+            alpha = 0.8f
+        ),
+        contentColor = MaterialTheme.colorScheme.onError,
+        shape = RoundedCornerShape(0.dp),
+        dragHandle = null,
     ) {
         Text(
             text = message.titlecase(),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(4.dp),
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontWeight = FontWeight.SemiBold,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            textAlign = TextAlign.Center,
         )
     }
 }

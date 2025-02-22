@@ -1,5 +1,6 @@
 package com.example.araknet.screens
 
+import android.annotation.SuppressLint
 import android.graphics.BlurMaskFilter
 import android.util.Log
 import android.widget.Toast
@@ -168,9 +169,9 @@ fun PowerButton(
         LaunchedEffect(currentProxyServer.id) {
             val result = viewModel.testProxyConnection(currentProxyServer.id)
             val resultMsg: String = if(result) {
-                "success connecting to proxy server ${currentProxyServer.id.shortString()}"
+                "Success connecting to proxy server ${currentProxyServer.id.shortString()}"
             } else {
-                "error connecting to proxy server ${currentProxyServer.id.shortString()}"
+                "Error connecting to proxy server ${currentProxyServer.id.shortString()}"
             }
 
             Log.d(HomeScreenViewModel.TAG, resultMsg)
@@ -212,6 +213,7 @@ fun PowerButton(
     }
 }
 
+@SuppressLint("SuspiciousModifierThen")
 fun Modifier.fancyShadow(
     color: Color = Color.Black,
     blurRadius: Dp = 0.dp,
@@ -314,7 +316,7 @@ fun ProxyServerHeader(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            proxyServer.country,
+                            proxyServer.country.name,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -324,10 +326,6 @@ fun ProxyServerHeader(
                             style = MaterialTheme.typography.labelLarge,
                         )
                     }
-                    Text(
-                        proxyServer.city,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
                 }
             }
 

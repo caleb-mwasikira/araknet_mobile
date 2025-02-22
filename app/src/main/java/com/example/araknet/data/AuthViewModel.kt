@@ -17,7 +17,7 @@ import java.io.IOException
 sealed class AuthError {
     abstract val errMessage: String
 
-    data class FieldError(val fieldName: String, override val errMessage: String) : AuthError()
+    data class ValidationError(val fieldName: String, override val errMessage: String) : AuthError()
     data class ConnectionError(
         override val errMessage: String = "Server currently unavailable. Please try again later"
     ) : AuthError()
@@ -43,11 +43,8 @@ class AuthViewModel : ViewModel() {
     var authState = MutableStateFlow(AuthState.Idle)
         private set
 
-    private val _authErrors = MutableSharedFlow<AuthError>(extraBufferCapacity = 1)
+    private val _authErrors = MutableSharedFlow<AuthError>()
     val authErrors = _authErrors.asSharedFlow()
-
-    private val _connectionErrors = MutableSharedFlow<AuthError.ConnectionError>(extraBufferCapacity = 1)
-    val connectionErrors = _connectionErrors.asSharedFlow()
 
     // TODO: check internet connection before sending auth requests
 
@@ -55,7 +52,7 @@ class AuthViewModel : ViewModel() {
         Log.d(MainActivity.TAG, "Attempting user login")
 
         // Validate login form
-        val loginErrors: List<AuthError> = buildList<AuthError?> {
+        val loginErrors: List<AuthError> = buildList {
             add(validateEmail(email))
             add(validatePassword(password))
         }.filterNotNull()
@@ -104,7 +101,7 @@ class AuthViewModel : ViewModel() {
             // Handle connection errors
             Log.d(MainActivity.TAG, "Login failed. Connection error; ${e.message}")
             authState.value = AuthState.Error
-            _connectionErrors.emit(
+            _authErrors.emit(
                 AuthError.ConnectionError()
             )
         }
@@ -114,14 +111,14 @@ class AuthViewModel : ViewModel() {
         Log.d(MainActivity.TAG, "Attempting user registration")
 
         // Validate register form
-        val registrationErrors: List<AuthError> = buildList<AuthError?> {
+        val registrationErrors: List<AuthError> = buildList {
             add(validateUsername(username))
             add(validateEmail(email))
             add(validatePassword(password))
 
             if (!agreedToTerms) {
                 add(
-                    AuthError.FieldError(
+                    AuthError.ValidationError(
                         "terms", "You must agree to terms and conditions before continuing"
                     )
                 )
@@ -173,7 +170,7 @@ class AuthViewModel : ViewModel() {
             // Handle connection errors
             Log.d(MainActivity.TAG, "Registration failed. Connection error; ${e.message}")
             authState.value = AuthState.Error
-            _connectionErrors.emit(
+            _authErrors.emit(
                 AuthError.ConnectionError()
             )
         }
@@ -181,12 +178,12 @@ class AuthViewModel : ViewModel() {
 
     private fun validateEmail(email: String): AuthError? {
         if (email.isEmpty()) {
-            return AuthError.FieldError("email", "Email cannot be empty")
+            return AuthError.ValidationError("email", "Email cannot be empty")
         }
 
         val emailRegex = Regex("[\\w-.]+@([\\w-]+\\.)+[\\w-]{2,4}")
         if (!emailRegex.matches(email)) {
-            return AuthError.FieldError("email", "Invalid email format")
+            return AuthError.ValidationError("email", "Invalid email format")
 
         }
         return null
@@ -194,7 +191,7 @@ class AuthViewModel : ViewModel() {
 
     private fun validatePassword(password: String): AuthError? {
         if (password.length < MIN_PASSWORD_LENGTH) {
-            return AuthError.FieldError(
+            return AuthError.ValidationError(
                 "password", "Password cannot be less than $MIN_PASSWORD_LENGTH characters long"
             )
         }
@@ -205,7 +202,7 @@ class AuthViewModel : ViewModel() {
 
     private fun validateUsername(username: String): AuthError? {
         if (username.length < MIN_NAME_LENGTH) {
-            return AuthError.FieldError(
+            return AuthError.ValidationError(
                 "username",
                 "Username too short. Minimum of $MIN_NAME_LENGTH characters acceptable"
             )

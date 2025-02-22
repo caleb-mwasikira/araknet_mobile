@@ -1,7 +1,9 @@
 package com.example.araknet.data
 
+import android.app.Application
 import android.util.Log
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
+import com.example.araknet.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -9,7 +11,7 @@ import java.util.UUID
 import kotlin.random.Random
 import kotlin.random.nextInt
 
-class HomeScreenViewModel: ViewModel() {
+class HomeScreenViewModel(application: Application) : AndroidViewModel(application) {
     private val _proxyServers = MutableStateFlow<List<ProxyServer>>(listOf())
     val proxyServers = _proxyServers.asStateFlow()
 
@@ -22,29 +24,43 @@ class HomeScreenViewModel: ViewModel() {
 
     init {
         _proxyServers.value = getProxyServers(5).toMutableList()
-        _currentIndex.value = if(_proxyServers.value.isEmpty()) null else 0
+        _currentIndex.value = if (_proxyServers.value.isEmpty()) null else 0
 
         Log.d(TAG, "proxy servers: ${_proxyServers.value}")
     }
 
+    private fun getCountries(): List<Country> {
+        val context = getApplication<Application>().applicationContext
+        val countryNames = context.resources.getStringArray(R.array.country_names)
+        val countryCodes = context.resources.getStringArray(R.array.country_codes)
+
+        return countryNames.zip(countryCodes)
+            .map { pair ->
+                val flagResId = getFlagResId(pair.second)
+
+                Country(
+                    name = pair.first,
+                    code = pair.second,
+                    flag = flagResId,
+                )
+            }
+    }
+
+    private fun getFlagResId(countryCode: String): Int {
+        val context = getApplication<Application>().applicationContext
+        val resName = countryCode.lowercase()
+        val resId = context.resources.getIdentifier(resName, "drawable", context.packageName)
+        return resId
+    }
+
     private fun getProxyServers(n: Int): List<ProxyServer> {
         val proxyServers = mutableListOf<ProxyServer>()
-        val countryAndCityNames = mapOf<String, List<String>>(
-            "United States" to listOf("Los Angeles", "New York", "Chicago", "Houston"),
-            "Germany" to listOf("Berlin", "Hamburg", "Munich"),
-            "China" to listOf("Shanghai", "Beijing", "Guangzhou", "Shenzhen"),
-            "Brazil" to listOf("Salvador", "Sao Paulo"),
-            "Japan" to listOf("Tokyo", "Nagoya", "Osaka", "Yokohama"),
-            "India" to listOf("Delhi", "Mumbai", "Chennai")
-        )
-        val countryKeys = countryAndCityNames.keys
-        val proxyStatuses = listOf(ProxyStatus.Online(), ProxyStatus.Offline(), ProxyStatus.Connecting())
+        val countries = getCountries()
+        val proxyStatuses =
+            listOf(ProxyStatus.Online(), ProxyStatus.Offline(), ProxyStatus.Connecting())
 
         for (i in 0..<n) {
-            val randomCountry = countryKeys.random()
-
-            val cities = countryAndCityNames[randomCountry] ?: continue
-            val randomCity = cities[Random.nextInt(cities.indices)]
+            val randomCountry = countries.random()
             val randomProxyStatus = proxyStatuses[Random.nextInt(proxyStatuses.indices)]
             val randomPing = Random.nextInt(15, 300)
 
@@ -54,7 +70,6 @@ class HomeScreenViewModel: ViewModel() {
             val proxyServer = ProxyServer(
                 id = UUID.randomUUID(),
                 country = randomCountry,
-                city = randomCity,
                 status = randomProxyStatus,
                 ping = randomPing,
                 downloadSpeed = minSpeed + (Random.nextFloat() * maxSpeed),
@@ -79,7 +94,7 @@ class HomeScreenViewModel: ViewModel() {
         if (isSuccessful) {
             // update connection status of proxy server
             _proxyServers.value = _proxyServers.value.map { proxyServer ->
-                if(proxyServer.id == id) {
+                if (proxyServer.id == id) {
                     proxyServer.copy(
                         status = ProxyStatus.Online(),
                         isConnected = true
@@ -101,7 +116,7 @@ class HomeScreenViewModel: ViewModel() {
         if (isSuccessful) {
             // update connection status of proxy server
             _proxyServers.value = _proxyServers.value.map { proxyServer ->
-                if(proxyServer.id == id) {
+                if (proxyServer.id == id) {
                     proxyServer.copy(
                         status = ProxyStatus.Offline(),
                         isConnected = false
