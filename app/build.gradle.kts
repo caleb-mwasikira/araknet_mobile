@@ -25,6 +25,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+
+            buildConfigField("String", "REMOTE_URL", "\"${project.findProperty("REMOTE_URL")}\"")
+            buildConfigField("String", "ANDROID_API_KEY", "\"${project.findProperty("ANDROID_API_KEY")}\"")
+        }
+
+        debug {
+            buildConfigField("String", "REMOTE_URL", "\"${project.findProperty("REMOTE_URL")}\"")
+            buildConfigField("String", "ANDROID_API_KEY", "\"${project.findProperty("ANDROID_API_KEY")}\"")
         }
     }
     compileOptions {
@@ -60,6 +68,7 @@ dependencies {
 
     // OkHttp3
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.security:security-crypto:1.0.0-alpha02")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

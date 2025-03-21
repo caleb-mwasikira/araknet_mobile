@@ -31,16 +31,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.araknet.MainActivity
 import com.example.araknet.R
-import com.example.araknet.data.AuthError
-import com.example.araknet.data.AuthState
 import com.example.araknet.data.AuthViewModel
-import com.example.araknet.data.NetworkMonitor
+import com.example.araknet.data.Error
+import com.example.araknet.data.Status
+import com.example.araknet.screens.widgets.ErrorMessage
+import com.example.araknet.screens.widgets.InputField
+import com.example.araknet.screens.widgets.PasswordField
 import com.example.araknet.ui.theme.AraknetTheme
 import com.example.araknet.utils.titlecase
 import kotlinx.coroutines.delay
@@ -48,26 +51,75 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun RegisterScreen(
-    navigateToLogin: () -> Unit,
-    networkMonitor: NetworkMonitor? = null,
-    authViewModel: AuthViewModel = viewModel(),
+    navigateToLogin: () -> Unit
 ) {
-    val isConnected: Boolean = networkMonitor?.isConnected?.collectAsState()?.value ?: false
+    val isConnected by MainActivity.networkMonitor.isConnected.collectAsState()
     val context = LocalContext.current
-    var authError by remember { mutableStateOf<AuthError?>(null) }
-    val authState by authViewModel.authState.collectAsState()
 
-    // Runs whenever isConnected changes
+    // Run once when screen is first composed
     LaunchedEffect(isConnected) {
-        if(!isConnected) {
+        if (!isConnected) {
             Toast.makeText(context, "No Internet Connection", Toast.LENGTH_LONG)
                 .show()
         }
     }
 
-    // Runs whenever authState changes
-    LaunchedEffect(authState) {
-        if (authState == AuthState.Success) {
+    Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Column(
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(horizontal=12.dp),
+            ) {
+                Text(
+                    text = "Get started with secure browsing",
+                    style = MaterialTheme.typography.headlineMedium,
+                    textAlign = TextAlign.Center,
+                )
+
+                Text(
+                    text = "Create your account and enjoy a fast, private, and secure internet experience.",
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            RegisterForm(
+                navigateToLogin = navigateToLogin,
+                isConnected = isConnected,
+            )
+        }
+    }
+}
+
+@Composable
+fun RegisterForm(
+    modifier: Modifier = Modifier,
+    navigateToLogin: () -> Unit,
+    isConnected: Boolean = false,
+    authViewModel: AuthViewModel = viewModel()
+) {
+    val context = LocalContext.current
+    var authError by remember { mutableStateOf<Error?>(null) }
+    val authStatus by authViewModel.authStatus.collectAsState()
+
+    // Runs when authStatus changes
+    LaunchedEffect(authStatus) {
+        if (authStatus == Status.Success) {
             val message = "Registration successful. Redirecting to Login Page"
             Log.d(MainActivity.TAG, message)
 
@@ -82,91 +134,35 @@ fun RegisterScreen(
 
     LaunchedEffect(Unit) {
         authViewModel.authErrors.collect { error ->
-            if (error is AuthError.ValidationError) {
-                authError = error
-                return@collect
-            }
+            authError = error
 
-            Toast.makeText(context, error.errMessage.titlecase(), Toast.LENGTH_LONG)
+            launch {
+                delay(5000)  // Hide after n seconds
+                authError = null
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        authViewModel.ioErrors.collect { error ->
+            Toast.makeText(context, error.message.titlecase(), Toast.LENGTH_LONG)
                 .show()
         }
     }
 
-    Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Column {
-                Text(
-                    text = "Create An Account",
-                    style = MaterialTheme.typography.headlineMedium,
-                )
-
-                Text(
-                    text = "Join Araknet VPN today",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+    authError?.let {
+        ErrorMessage(
+            it.message.titlecase(),
+            onDismissRequest = {
+                authError = null
             }
-
-            Spacer(modifier = Modifier.height(52.dp))
-
-            val coroutineScope = rememberCoroutineScope()
-
-            RegisterForm(
-                navigateToLogin = navigateToLogin,
-                isConnected = isConnected,
-                authViewModel = authViewModel,
-                onRegisterBtnClicked = {
-                    if (!isConnected) {
-                        Toast.makeText(context, "No Internet Connection", Toast.LENGTH_LONG)
-                            .show()
-                        return@RegisterForm
-                    }
-
-                    coroutineScope.launch {
-                        authViewModel.registerUser()
-                    }
-                }
-            )
-
-            // Display error messages
-            authError?.let { error ->
-                ErrorMessage(
-                    message = error.errMessage,
-                    onDismissRequest = {
-                        authError = null
-                    }
-                )
-
-                coroutineScope.launch {
-                    delay(2000)
-                    authError = null
-                }
-            }
-        }
+        )
     }
-}
 
-@Composable
-fun RegisterForm(
-    modifier: Modifier = Modifier,
-    navigateToLogin: () -> Unit,
-    onRegisterBtnClicked: () -> Unit,
-    isConnected: Boolean = false,
-    authViewModel: AuthViewModel,
-) {
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.Center,
     ) {
         InputField(
             labelText = "Username",
@@ -214,6 +210,7 @@ fun RegisterForm(
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 8.dp),
         ) {
             val containerColor = if (isConnected) {
                 MaterialTheme.colorScheme.primary
@@ -225,15 +222,28 @@ fun RegisterForm(
             } else {
                 MaterialTheme.colorScheme.onSurface
             }
+            val coroutineScope = rememberCoroutineScope()
 
             ElevatedButton(
-                onClick = onRegisterBtnClicked,
-                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    if (!isConnected) {
+                        Toast.makeText(context, "No Internet Connection", Toast.LENGTH_LONG)
+                            .show()
+                        return@ElevatedButton
+                    }
+
+                    coroutineScope.launch {
+                        authViewModel.registerUser()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp),
                 colors = ButtonDefaults.buttonColors().copy(
                     containerColor = containerColor,
                     contentColor = contentColor,
                 ),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
             ) {
                 Text(
                     text = "Create Account",

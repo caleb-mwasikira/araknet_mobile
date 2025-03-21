@@ -55,6 +55,7 @@ import com.example.araknet.R
 import com.example.araknet.data.HomeScreenViewModel
 import com.example.araknet.data.ProxyServer
 import com.example.araknet.data.ProxyStatus
+import com.example.araknet.screens.widgets.NoItemsFound
 import com.example.araknet.ui.theme.AraknetTheme
 import com.example.araknet.ui.theme.connectingColor
 import com.example.araknet.ui.theme.onlineColor

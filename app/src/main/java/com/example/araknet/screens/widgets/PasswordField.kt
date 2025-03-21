@@ -1,7 +1,5 @@
-package com.example.araknet.screens
+package com.example.araknet.screens.widgets
 
-import android.util.Log
-import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,84 +7,54 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.araknet.MainActivity
 import com.example.araknet.R
-import com.example.araknet.utils.titlecase
-
-
-@Composable
-fun InputField(
-    labelText: String,
-    value: String,
-    onValueChanged: (String) -> Unit,
-    @DrawableRes leadingIconId: Int? = null,
-    keyboardType: KeyboardType = KeyboardType.Text,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChanged,
-        modifier = Modifier.fillMaxWidth(),
-        textStyle = MaterialTheme.typography.bodyLarge,
-        leadingIcon = {
-            // Display leading icon if leadingIconId is not null
-            leadingIconId?.let {
-                Icon(
-                    painter = painterResource(leadingIconId),
-                    contentDescription = null,
-                )
-            }
-        },
-        label = {
-            Text(
-                text = labelText,
-                style = MaterialTheme.typography.labelLarge,
-            )
-        },
-        keyboardOptions = KeyboardOptions.Default.copy(
-            keyboardType = keyboardType
-        ),
-        shape = RoundedCornerShape(8.dp),
-        singleLine = true,
-    )
-}
 
 @Composable
 fun PasswordField(
     labelText: String,
     value: String,
     onValueChanged: (String) -> Unit,
-    displayForgotPassword: Boolean = false,
+    navigateToForgotPasswordScreen: (() -> Unit)? = null,
 ) {
     var passwordVisible: Boolean by remember { mutableStateOf(false) }
 
     Column(
         verticalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
     ) {
-        OutlinedTextField(
+        Text(
+            text = labelText,
+            style = MaterialTheme.typography.bodyLarge,
+        )
+
+        TextField(
             value = value,
             onValueChange = onValueChanged,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(elevation = 8.dp, shape = RoundedCornerShape(8.dp)),
             textStyle = MaterialTheme.typography.bodyLarge,
             leadingIcon = {
                 Icon(
@@ -110,26 +78,22 @@ fun PasswordField(
                 }
             },
             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            label = {
-                Text(
-                    text = labelText, style = MaterialTheme.typography.labelLarge
-                )
-            },
             keyboardOptions = KeyboardOptions.Default.copy(
                 keyboardType = KeyboardType.Password
             ),
             shape = RoundedCornerShape(8.dp),
             singleLine = true,
+            colors = textFieldColors(),
         )
 
-        if (displayForgotPassword) {
+        navigateToForgotPasswordScreen?.let {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                TextButton(onClick = {
-                    Log.d(MainActivity.TAG, "Forgot password button clicked")
-                }) {
+                TextButton(
+                    onClick = navigateToForgotPasswordScreen,
+                ) {
                     Text(
                         text = "Forgot Password?",
                         style = MaterialTheme.typography.labelLarge,
@@ -142,30 +106,14 @@ fun PasswordField(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@Preview(showBackground = true)
 @Composable
-fun ErrorMessage(
-    message: String,
-    onDismissRequest: () -> Unit,
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
-        containerColor = MaterialTheme.colorScheme.error.copy(
-            alpha = 0.8f
-        ),
-        contentColor = MaterialTheme.colorScheme.onError,
-        shape = RoundedCornerShape(0.dp),
-        dragHandle = null,
-    ) {
-        Text(
-            text = message.titlecase(),
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.SemiBold,
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            textAlign = TextAlign.Center,
+fun PreviewPasswordField() {
+    MaterialTheme {
+        PasswordField(
+            labelText = "Enter Password",
+            value = "NoMercy",
+            onValueChanged = {},
         )
     }
 }

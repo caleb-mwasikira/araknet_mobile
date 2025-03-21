@@ -1,6 +1,9 @@
 package com.example.araknet.data
 
-import com.google.gson.annotations.SerializedName
+import android.content.Context
+import android.os.Build
+import androidx.annotation.RequiresApi
+import com.example.araknet.BuildConfig
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import retrofit2.Response
@@ -8,12 +11,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.POST
-
-// Note: tried placing ANDROID_API_KEY and BASE_URL in local.properties file
-// but env variables were not being loaded properly.
-// So I decided, f*** it and hard-coded them within the application code
-const val ANDROID_API_KEY: String = "NkZbN3c0ZTghaUAwTW0hdDFuPDxQOj8wLXdlXsKjblNM"
-const val BASE_URL: String = "http://192.168.137.121:8080/"
+import java.time.Duration
 
 class AuthInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): okhttp3.Response {
@@ -21,55 +19,41 @@ class AuthInterceptor : Interceptor {
 
         // Add request headers to request
         val newRequest = originalRequest.newBuilder()
-            .addHeader("Authorization", "Bearer $ANDROID_API_KEY")
+            .addHeader("Authorization", "Bearer ${BuildConfig.ANDROID_API_KEY}")
             .addHeader("Content-Type", "application/json")
             .build()
         return chain.proceed(newRequest)
     }
 }
 
-val client = OkHttpClient.Builder()
-    .addInterceptor(AuthInterceptor())
-    .build()
+@RequiresApi(Build.VERSION_CODES.O)
+fun getRetrofitBuilder(context: Context): Retrofit {
+    val client = OkHttpClient.Builder()
+        .addInterceptor(AuthInterceptor())
+        .cookieJar(CustomCookieJar(context))
+        .callTimeout(Duration.ofSeconds(30))
+        .build()
 
-private val retrofitBuilder = Retrofit.Builder()
-    .addConverterFactory(GsonConverterFactory.create())
-    .baseUrl(BASE_URL)
-    .client(client)
-    .build()
-
-data class LoginCredentials(
-    val email: String,
-    val password: String
-)
-
-data class LoginResponse(
-    val message: String,
-    @SerializedName("data") val jwtToken: String? = null
-)
-
-data class RegisterCredentials(
-    val username: String,
-    val email: String,
-    val password: String,
-)
-
-data class RegisterResponse(
-    val message: String,
-    val errors: Map<String, List<String>>? = null
-)
+    return Retrofit.Builder()
+        .addConverterFactory(GsonConverterFactory.create())
+        .baseUrl(BuildConfig.REMOTE_URL)
+        .client(client)
+        .build()
+}
 
 interface ApiService {
-    @POST("/android/api/login/")
-    suspend fun loginUser(@Body loginCredentials: LoginCredentials): Response<LoginResponse>
+    @POST("/api/login")
+    suspend fun loginUser(@Body loginRequest: LoginDto): Response<ApiResponse<Any>>
 
-    @POST("/android/api/register/")
-    suspend fun registerUser(@Body registerCredentials: RegisterCredentials): Response<RegisterResponse>
+    @POST("/api/register")
+    suspend fun registerUser(@Body registerResponse: RegisterDto): Response<ApiResponse<Any>>
+
+    @POST("/api/verify-auth")
+    suspend fun verifyAuth(): Response<ApiResponse<Any>>
+
+    @POST("/api/forgot-password")
+    suspend fun forgotPassword(@Body email: EmailDto): Response<ApiResponse<Any>>
+
+    @POST("/api/reset-password")
+    suspend fun resetPassword(@Body passwordResetDto: PasswordResetDto): Response<ApiResponse<Any>>
 }
-
-object Api {
-    val retrofitService: ApiService by lazy {
-        retrofitBuilder.create(ApiService::class.java)
-    }
-}
-
