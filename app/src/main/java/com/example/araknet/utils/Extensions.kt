@@ -2,6 +2,7 @@ package com.example.araknet.utils
 
 import java.util.UUID
 
+
 fun String.titlecase(): String {
     return this.split(" ").joinToString(" ") { word ->
         word.replaceFirstChar { char ->

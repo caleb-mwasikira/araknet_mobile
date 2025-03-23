@@ -2,8 +2,6 @@ package com.example.araknet.screens
 
 import android.annotation.SuppressLint
 import android.graphics.BlurMaskFilter
-import android.util.Log
-import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.InfiniteRepeatableSpec
 import androidx.compose.animation.core.RepeatMode
@@ -30,10 +28,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,7 +42,6 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -53,38 +50,41 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.araknet.R
 import com.example.araknet.data.HomeScreenViewModel
-import com.example.araknet.data.ProxyServer
-import com.example.araknet.data.ProxyStatus
 import com.example.araknet.screens.widgets.NoItemsFound
 import com.example.araknet.ui.theme.AraknetTheme
 import com.example.araknet.ui.theme.connectingColor
 import com.example.araknet.ui.theme.onlineColor
-import com.example.araknet.utils.shortString
+import kotlinx.coroutines.launch
 import kotlin.math.round
 
 
 @Composable
 fun HomeScreen(
-    viewModel: HomeScreenViewModel = viewModel()
+    vpnViewModel: HomeScreenViewModel = viewModel()
 ) {
+    val proxyServers by vpnViewModel.proxyServers.collectAsState()
+    val scope = rememberCoroutineScope()
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-    ) {  innerPadding ->
-
-        val proxyServers by viewModel.proxyServers.collectAsState()
-
+    ) { innerPadding ->
         if (proxyServers.isEmpty()) {
             NoItemsFound(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                errMessage="No proxy servers found"
+                errMessage = "No proxy servers found",
+                onRefreshItems = {
+                    scope.launch {
+                        vpnViewModel.getProxyServers()
+                    }
+                }
             )
             return@Scaffold
         }
 
-        val currentIndex by viewModel.currentIndex.collectAsState()
-        val currentProxyServer = proxyServers[currentIndex!!]
+        val currentIndex by vpnViewModel.currentIndex.collectAsState()
+        val currentProxyServer = proxyServers[currentIndex ?: 0]
 
         Column(
             modifier = Modifier
@@ -94,16 +94,21 @@ fun HomeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             ProxyServerHeader(
-                currentProxyServer,
+                id = currentProxyServer.id,
+                city = currentProxyServer.ipInfo?.city ?: "Anonymous",
+                color = currentProxyServer.status.primaryColor,
+                status = currentProxyServer.status.name,
+                ping = currentProxyServer.ping,
                 onClickNext = {
-                    viewModel.nextProxyServer()
+                    vpnViewModel.nextProxyServer()
                 }
             )
 
             PowerButton(
-                currentProxyServer,
                 initialWidth = 256.dp,
                 onPressedWidth = 300.dp,
+                backgroundColor = currentProxyServer.status.primaryColor,
+                onPressed = {}
             )
 
             Row(
@@ -134,16 +139,16 @@ fun HomeScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PowerButton(
-    currentProxyServer: ProxyServer,
     initialWidth: Dp,
     onPressedWidth: Dp,
-    viewModel: HomeScreenViewModel = viewModel(),
+    backgroundColor: Color,
+    onPressed: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
     val animatedWidth by animateDpAsState(
-        targetValue=if (isPressed) onPressedWidth else initialWidth,
+        targetValue = if (isPressed) onPressedWidth else initialWidth,
         animationSpec = if (isPressed) {
             InfiniteRepeatableSpec(
                 animation = tween(durationMillis = 400),
@@ -153,31 +158,8 @@ fun PowerButton(
         label = ""
     )
 
-    val color = if(currentProxyServer.status is ProxyStatus.Online) {
-        if (currentProxyServer.isConnected) {
-            onlineColor
-        } else {
-            connectingColor
-        }
-    } else {
-        currentProxyServer.status.primaryColor
-    }
-
-    val localContext = LocalContext.current
-
     if (isPressed) {
-        // create or test existing connection
-        LaunchedEffect(currentProxyServer.id) {
-            val result = viewModel.testProxyConnection(currentProxyServer.id)
-            val resultMsg: String = if(result) {
-                "Success connecting to proxy server ${currentProxyServer.id.shortString()}"
-            } else {
-                "Error connecting to proxy server ${currentProxyServer.id.shortString()}"
-            }
-
-            Log.d(HomeScreenViewModel.TAG, resultMsg)
-            Toast.makeText(localContext, resultMsg, Toast.LENGTH_LONG).show()
-        }
+        onPressed()
     }
 
     Column(
@@ -189,15 +171,15 @@ fun PowerButton(
             modifier = Modifier
                 .size(animatedWidth)
                 .fancyShadow(
-                    color = color,
+                    color = backgroundColor,
                     blurRadius = animatedWidth
                 )
                 .clip(CircleShape)
-                .background(color)
+                .background(backgroundColor)
                 .combinedClickable(
                     interactionSource = interactionSource,
                     indication = null,
-                ){},
+                ) {},
             contentAlignment = Alignment.Center
         ) {
             Image(
@@ -206,7 +188,7 @@ fun PowerButton(
                 modifier = Modifier
                     .size(initialWidth * 0.5f),
                 colorFilter = ColorFilter.tint(
-                    color= Color.White,
+                    color = Color.White,
                 )
             )
         }
@@ -224,12 +206,13 @@ fun Modifier.fancyShadow(
             val paint = Paint()
             val frameworkPaint = paint.asFrameworkPaint()
             if (blurRadius != 0.dp) {
-                frameworkPaint.maskFilter = (BlurMaskFilter(blurRadius.toPx(), BlurMaskFilter.Blur.NORMAL))
+                frameworkPaint.maskFilter =
+                    (BlurMaskFilter(blurRadius.toPx(), BlurMaskFilter.Blur.NORMAL))
             }
             frameworkPaint.color = color.toArgb()
 
-            val center = Offset(size.width/2, size.width/2)
-            val radius = size.width/2
+            val center = Offset(size.width / 2, size.width / 2)
+            val radius = size.width / 2
 
             canvas.drawCircle(
                 center = center,
@@ -282,7 +265,11 @@ fun BandwidthSection(
 
 @Composable
 fun ProxyServerHeader(
-    proxyServer: ProxyServer,
+    id: String,
+    city: String,
+    color: Color,
+    status: String,
+    ping: Int,
     onClickNext: () -> Unit,
 ) {
     Column(
@@ -303,12 +290,12 @@ fun ProxyServerHeader(
                     modifier = Modifier
                         .size(12.dp)
                         .clip(CircleShape)
-                        .background(color = proxyServer.status.primaryColor)
+                        .background(color = color)
                 ) {}
 
                 Column {
                     Text(
-                        proxyServer.id.shortString(),
+                        id,
                         style = MaterialTheme.typography.labelMedium,
                     )
 
@@ -317,13 +304,13 @@ fun ProxyServerHeader(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            proxyServer.country.name,
+                            city,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.SemiBold,
                         )
 
                         Text(
-                            "${proxyServer.status}",
+                            status,
                             style = MaterialTheme.typography.labelLarge,
                         )
                     }
@@ -342,7 +329,7 @@ fun ProxyServerHeader(
             }
         }
 
-        PingCounter(proxyServer.ping)
+        PingCounter(ping)
     }
 }
 
@@ -372,7 +359,7 @@ fun PingCounter(
     }
 }
 
-@Preview(showBackground=true)
+@Preview(showBackground = true)
 @Composable
 fun PreviewHomeScreen() {
     AraknetTheme {

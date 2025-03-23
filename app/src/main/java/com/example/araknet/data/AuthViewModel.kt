@@ -53,32 +53,26 @@ class AuthViewModel : ViewModel() {
         if (response.isSuccessful) {
             authStatus.value = Status.Success
             Log.d(MainActivity.TAG, "Response successful; $response")
+            return
+        }
 
-        } else {
-            authStatus.value = Status.Fail
-            Log.d(MainActivity.TAG, "Response failed; $response")
+        authStatus.value = Status.Fail
+        val responseString: String = response.errorBody()?.string() ?: run {
+            _authErrors.emit(
+                Error("Request failed with unknown error message")
+            )
+            return
+        }
 
-            val responseString: String = response.errorBody()?.string() ?: run {
-                _authErrors.emit(
-                    Error("Request failed with unknown error message")
-                )
-                return
-            }
+        val apiResponse: ApiResponse<*> =
+            Gson().fromJson(responseString, ApiResponse::class.java)
+        val errors: List<String> = apiResponse.errors?.values?.toList() ?: listOf(apiResponse.message)
 
-            val apiResponse: ApiResponse<*> =
-                Gson().fromJson(responseString, ApiResponse::class.java)
-            val errors = apiResponse.errors?.values
-            if (errors == null) {
-                _authErrors.emit(
-                    Error(apiResponse.message)
-                )
-            } else {
-                errors.forEach { error ->
-                    _authErrors.emit(
-                        Error(error)
-                    )
-                }
-            }
+        Log.d(MainActivity.TAG, "Response failed; $errors")
+        errors.forEach { error ->
+            _authErrors.emit(
+                Error(error)
+            )
         }
     }
 

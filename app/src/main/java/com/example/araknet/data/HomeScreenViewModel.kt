@@ -3,82 +3,112 @@ package com.example.araknet.data
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
-import com.example.araknet.R
-import kotlinx.coroutines.delay
+import androidx.lifecycle.viewModelScope
+import com.example.araknet.MainActivity
+import com.example.araknet.utils.shortString
+import com.google.gson.Gson
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import retrofit2.Response
 import java.util.UUID
-import kotlin.random.Random
-import kotlin.random.nextInt
+
+
+data class ProxyServer(
+    val id: String,
+    val protocol: String,
+    val address: String,
+    val ipInfo: IPInfo?,
+    var status: ProxyStatus = ProxyStatus.Offline,
+    var ping: Int = 0,
+    var downloadSpeed: Float = 0f,
+    var uploadSpeed: Float = 0f,
+    var isConnected: Boolean = false,
+)
+
 
 class HomeScreenViewModel(application: Application) : AndroidViewModel(application) {
+    companion object {
+        val api: ApiService? = MainActivity.retrofitService
+    }
+
     private val _proxyServers = MutableStateFlow<List<ProxyServer>>(listOf())
     val proxyServers = _proxyServers.asStateFlow()
 
     private val _currentIndex = MutableStateFlow<Int?>(null)
     val currentIndex = _currentIndex.asStateFlow()
 
-    companion object {
-        const val TAG: String = "HomeScreenViewModel"
-    }
+    private val _errors = MutableStateFlow<Error?>(null)
+    val errors
+        get() = _errors.asStateFlow()
 
     init {
-        _proxyServers.value = getProxyServers(5).toMutableList()
-        _currentIndex.value = if (_proxyServers.value.isEmpty()) null else 0
-
-        Log.d(TAG, "proxy servers: ${_proxyServers.value}")
+        viewModelScope.launch {
+            getProxyServers()
+            _currentIndex.value = if (_proxyServers.value.isEmpty()) null else 0
+        }
     }
 
-    private fun getCountries(): List<Country> {
-        val context = getApplication<Application>().applicationContext
-        val countryNames = context.resources.getStringArray(R.array.country_names)
-        val countryCodes = context.resources.getStringArray(R.array.country_codes)
+    private suspend fun <T> extractResponseData(response: Response<ApiResponse<T>>): T? {
+        if (response.isSuccessful) {
+            Log.d(MainActivity.TAG, "Response successful; $response")
+            val apiResponse: ApiResponse<T>? = response.body()
+            return apiResponse?.data
+        }
 
-        return countryNames.zip(countryCodes)
-            .map { pair ->
-                val flagResId = getFlagResId(pair.second)
+        Log.d(MainActivity.TAG, "Response failed; $response")
+        val responseString: String = response.errorBody()?.string() ?: run {
+            _errors.emit(
+                Error("Request failed with unknown error message")
+            )
+            return null
+        }
 
-                Country(
-                    name = pair.first,
-                    code = pair.second,
-                    flag = flagResId,
+        val apiResponse: ApiResponse<*> = Gson().fromJson(responseString, ApiResponse::class.java)
+        val errors = apiResponse.errors?.values ?: run {
+            _errors.emit(
+                Error(apiResponse.message)
+            )
+            return null
+        }
+
+        errors.forEach { error ->
+            _errors.emit(
+                Error(error)
+            )
+        }
+        return null
+    }
+
+    suspend fun getProxyServers() {
+        Log.d(MainActivity.TAG, "Fetching proxy servers")
+
+        try {
+            val response = api?.getProxies() ?: run {
+                Log.d(MainActivity.TAG, "Null retrofitService")
+                return
+            }
+            val proxyServers: List<ProxyDto> = extractResponseData(response) ?: run {
+                Log.d(MainActivity.TAG, "Null proxyServers")
+                return
+            }
+            _proxyServers.value = proxyServers.map { proxy ->
+                val proxyId = UUID.randomUUID().shortString()
+
+                ProxyServer(
+                    id = proxyId, protocol = proxy.protocol,
+                    address = proxy.address, ipInfo = proxy.ipInfo,
                 )
             }
-    }
 
-    private fun getFlagResId(countryCode: String): Int {
-        val context = getApplication<Application>().applicationContext
-        val resName = countryCode.lowercase()
-        val resId = context.resources.getIdentifier(resName, "drawable", context.packageName)
-        return resId
-    }
-
-    private fun getProxyServers(n: Int): List<ProxyServer> {
-        val proxyServers = mutableListOf<ProxyServer>()
-        val countries = getCountries()
-        val proxyStatuses =
-            listOf(ProxyStatus.Online(), ProxyStatus.Offline(), ProxyStatus.Connecting())
-
-        for (i in 0..<n) {
-            val randomCountry = countries.random()
-            val randomProxyStatus = proxyStatuses[Random.nextInt(proxyStatuses.indices)]
-            val randomPing = Random.nextInt(15, 300)
-
-            val maxSpeed = Random.nextInt(500, 1000) // 500 - 1000 Mbps
-            val minSpeed = Random.nextInt(0, 50) // 0 - 50 Mbps
-
-            val proxyServer = ProxyServer(
-                id = UUID.randomUUID(),
-                country = randomCountry,
-                status = randomProxyStatus,
-                ping = randomPing,
-                downloadSpeed = minSpeed + (Random.nextFloat() * maxSpeed),
-                uploadSpeed = minSpeed + (Random.nextFloat() * maxSpeed),
-                isConnected = randomProxyStatus is ProxyStatus.Online && Random.nextBoolean()
+        } catch (e: Exception) {
+            Log.d(MainActivity.TAG, "Error fetching proxy servers; ${e.message}")
+            _errors.emit(
+                Error(
+                    message = "Backend server currently unreachable"
+                )
             )
-            proxyServers.add(proxyServer)
         }
-        return proxyServers
     }
 
     fun nextProxyServer() {
@@ -87,46 +117,10 @@ class HomeScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     suspend fun testProxyConnection(id: UUID): Boolean {
-        Log.d(TAG, "testing connection on proxy server: $id")
-        delay(500) // simulate busy work; eg testing network connection
-
-        val isSuccessful = Random.nextBoolean()
-        if (isSuccessful) {
-            // update connection status of proxy server
-            _proxyServers.value = _proxyServers.value.map { proxyServer ->
-                if (proxyServer.id == id) {
-                    proxyServer.copy(
-                        status = ProxyStatus.Online(),
-                        isConnected = true
-                    )
-                } else {
-                    proxyServer
-                }
-            }
-            return true
-        }
-        return false
+        TODO("Not yet implemented")
     }
 
     suspend fun closeProxyConnection(id: UUID): Boolean {
-        Log.d(TAG, "closing proxy connection on server: $id")
-        delay(500) // simulate busy work; eg closing network connection
-
-        val isSuccessful = Random.nextBoolean()
-        if (isSuccessful) {
-            // update connection status of proxy server
-            _proxyServers.value = _proxyServers.value.map { proxyServer ->
-                if (proxyServer.id == id) {
-                    proxyServer.copy(
-                        status = ProxyStatus.Offline(),
-                        isConnected = false
-                    )
-                } else {
-                    proxyServer
-                }
-            }
-            return true
-        }
-        return false
+        TODO("Not yet implemented")
     }
 }

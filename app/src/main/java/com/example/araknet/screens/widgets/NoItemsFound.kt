@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,6 +23,7 @@ import com.example.araknet.ui.theme.AraknetTheme
 fun NoItemsFound(
     modifier: Modifier = Modifier,
     errMessage: String,
+    onRefreshItems: () -> Unit,
 ) {
     Column(
         modifier = modifier.fillMaxSize(),
@@ -33,7 +35,7 @@ fun NoItemsFound(
             contentDescription = "No Items Found",
             modifier = Modifier
                 .size(240.dp)
-                .padding(vertical=18.dp),
+                .padding(vertical = 18.dp),
         )
 
         Text(
@@ -41,6 +43,15 @@ fun NoItemsFound(
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
         )
+
+        ElevatedButton(
+            onClick = onRefreshItems,
+        ) {
+            Text(
+                "Refresh",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
     }
 }
 
@@ -49,7 +60,8 @@ fun NoItemsFound(
 fun PreviewNoItemFound() {
     AraknetTheme {
         NoItemsFound(
-            errMessage = "No items found"
+            errMessage = "No items found",
+            onRefreshItems = {},
         )
     }
 }

@@ -1,5 +1,12 @@
 package com.example.araknet.data
 
+import androidx.compose.ui.graphics.Color
+import com.example.araknet.ui.theme.connectingColor
+import com.example.araknet.ui.theme.connectingSecondaryColor
+import com.example.araknet.ui.theme.offlineColor
+import com.example.araknet.ui.theme.offlineSecondaryColor
+import com.example.araknet.ui.theme.onlineColor
+import com.example.araknet.ui.theme.onlineSecondaryColor
 import com.google.gson.annotations.SerializedName
 
 data class LoginDto(
@@ -27,4 +34,28 @@ data class PasswordResetDto(
     @SerializedName("password_reset_token") val passwordResetToken: String,
     val email: String,
     @SerializedName("new_password") val newPassword: String,
+)
+
+data class IPInfo(
+    val query: String,
+    val status: String,
+    val country: String,
+    val countryCode: String,
+    val city: String,
+)
+
+enum class ProxyStatus(
+    val primaryColor: Color,
+    val secondaryColor: Color
+) {
+    Online(onlineColor, onlineSecondaryColor),
+    Offline(offlineColor, offlineSecondaryColor),
+    Connecting(connectingColor, connectingSecondaryColor),
+}
+
+data class ProxyDto(
+    val id: String,
+    val protocol: String,
+    val address: String,
+    @SerializedName("ip_info") val ipInfo: IPInfo?,
 )

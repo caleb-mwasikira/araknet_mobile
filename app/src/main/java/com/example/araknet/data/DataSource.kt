@@ -10,6 +10,7 @@ import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.POST
 import java.time.Duration
 
@@ -48,7 +49,7 @@ interface ApiService {
     @POST("/api/register")
     suspend fun registerUser(@Body registerResponse: RegisterDto): Response<ApiResponse<Any>>
 
-    @POST("/api/verify-auth")
+    @GET("/api/verify-auth")
     suspend fun verifyAuth(): Response<ApiResponse<Any>>
 
     @POST("/api/forgot-password")
@@ -56,4 +57,7 @@ interface ApiService {
 
     @POST("/api/reset-password")
     suspend fun resetPassword(@Body passwordResetDto: PasswordResetDto): Response<ApiResponse<Any>>
+
+    @GET("/api/proxies")
+    suspend fun getProxies(): Response<ApiResponse<List<ProxyDto>>>
 }

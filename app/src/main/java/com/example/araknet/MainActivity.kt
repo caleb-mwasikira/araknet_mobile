@@ -18,13 +18,13 @@ import androidx.navigation.navArgument
 import com.example.araknet.data.ApiService
 import com.example.araknet.data.NetworkMonitor
 import com.example.araknet.data.getRetrofitBuilder
+import com.example.araknet.screens.ForgotPasswordScreen
 import com.example.araknet.screens.HomeScreen
 import com.example.araknet.screens.LoginScreen
 import com.example.araknet.screens.RegisterScreen
 import com.example.araknet.screens.ResetPasswordScreen
 import com.example.araknet.screens.Routes
 import com.example.araknet.ui.theme.AraknetTheme
-import com.example.araknet.screens.ForgotPasswordScreen
 
 class MainActivity : ComponentActivity() {
     companion object {
@@ -92,9 +92,12 @@ class MainActivity : ComponentActivity() {
 
                         composable(
                             route = "${Routes.ResetPasswordScreen.name}/{email}",
-                            arguments = listOf(navArgument("email") { type = NavType.StringType })  // Specify argument type
+                            arguments = listOf(navArgument("email") {
+                                type = NavType.StringType
+                            })  // Specify argument type
                         ) { backStackEntry ->
-                            val email = backStackEntry.arguments?.getString("email") ?: ""  // Retrieve argument
+                            val email = backStackEntry.arguments?.getString("email")
+                                ?: ""  // Retrieve argument
 
                             ResetPasswordScreen(
                                 email = email,
