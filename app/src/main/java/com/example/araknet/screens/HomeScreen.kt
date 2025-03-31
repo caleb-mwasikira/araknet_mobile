@@ -30,8 +30,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,8 +85,8 @@ fun HomeScreen(
             return@Scaffold
         }
 
-        val currentIndex by vpnViewModel.currentIndex.collectAsState()
-        val currentProxyServer = proxyServers[currentIndex ?: 0]
+        var currentIndex by remember { mutableIntStateOf(0) }
+        val currentProxyServer = proxyServers[currentIndex]
 
         Column(
             modifier = Modifier
@@ -100,7 +102,7 @@ fun HomeScreen(
                 status = currentProxyServer.status.name,
                 ping = currentProxyServer.ping,
                 onClickNext = {
-                    vpnViewModel.nextProxyServer()
+                    currentIndex = (currentIndex + 1) % proxyServers.size
                 }
             )
 

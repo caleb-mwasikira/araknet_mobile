@@ -56,6 +56,11 @@ enum class ProxyStatus(
 data class ProxyDto(
     val id: String,
     val protocol: String,
-    val address: String,
+    var host: String,
+    val port: Int,
     @SerializedName("ip_info") val ipInfo: IPInfo?,
 )
+
+fun ProxyDto.address(): String {
+    return "${this.host}:${this.port}"
+}
