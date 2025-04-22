@@ -77,8 +77,8 @@ val surfaceContainerHighestDark = Color(0xFF32353A)
 val offlineColor = Color(0xFFF44336)
 val offlineSecondaryColor = Color(0xFFFF4D4D)
 
-val onlineColor = Color(0xFF4CAF50)
+val connectedColor = Color(0xFF4CAF50)
 val onlineSecondaryColor = Color(0xFF8BC34A)
 
-val connectingColor = Color(0xFFFF9800)
+val onlineColor = Color(0xFFFF9800)
 val connectingSecondaryColor = Color(0xFFFFC107)

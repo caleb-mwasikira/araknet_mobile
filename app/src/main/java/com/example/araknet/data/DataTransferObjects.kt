@@ -1,11 +1,11 @@
 package com.example.araknet.data
 
 import androidx.compose.ui.graphics.Color
-import com.example.araknet.ui.theme.connectingColor
+import com.example.araknet.ui.theme.onlineColor
 import com.example.araknet.ui.theme.connectingSecondaryColor
 import com.example.araknet.ui.theme.offlineColor
 import com.example.araknet.ui.theme.offlineSecondaryColor
-import com.example.araknet.ui.theme.onlineColor
+import com.example.araknet.ui.theme.connectedColor
 import com.example.araknet.ui.theme.onlineSecondaryColor
 import com.google.gson.annotations.SerializedName
 
@@ -46,11 +46,10 @@ data class IPInfo(
 
 enum class ProxyStatus(
     val primaryColor: Color,
-    val secondaryColor: Color
 ) {
-    Online(onlineColor, onlineSecondaryColor),
-    Offline(offlineColor, offlineSecondaryColor),
-    Connecting(connectingColor, connectingSecondaryColor),
+    Connected(connectedColor),
+    Offline(offlineColor),
+    Online(onlineColor),
 }
 
 data class ProxyDto(

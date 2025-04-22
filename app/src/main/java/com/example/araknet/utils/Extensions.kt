@@ -1,13 +1,7 @@
 package com.example.araknet.utils
 
-import android.os.Build
-import androidx.annotation.RequiresApi
 import okhttp3.Request
 import okio.Buffer
-import java.io.ByteArrayOutputStream
-import java.nio.charset.Charset
-import java.util.UUID
-import java.util.zip.GZIPOutputStream
 
 
 fun String.titlecase(): String {
@@ -16,10 +10,6 @@ fun String.titlecase(): String {
             if (char.isLowerCase()) char.titlecase() else char.toString()
         }
     }
-}
-
-fun UUID.shortString(): String {
-    return this.toString().take(13)
 }
 
 fun Request.toRawString(): String {

@@ -101,7 +101,7 @@ class AuthViewModel : ViewModel() {
             handleResponse(response)
 
         } catch (e: IOException) {
-            Log.d(MainActivity.TAG, "Error contacting backend server; ${e.message}")
+            Log.d(MainActivity.TAG, "Error contacting backend server; $e")
             _authErrors.emit(
                 Error("Error contacting backend server")
             )
@@ -147,7 +147,7 @@ class AuthViewModel : ViewModel() {
             handleResponse(response)
 
         } catch (e: IOException) {
-            Log.d(MainActivity.TAG, "Error contacting backend server; ${e.message}")
+            Log.d(MainActivity.TAG, "Error contacting backend server; $e")
             _authErrors.emit(
                 Error("Error contacting backend server")
             )
@@ -168,7 +168,7 @@ class AuthViewModel : ViewModel() {
                 Log.d(MainActivity.TAG, "verifyPreviousLogin failed; $response")
             }
         } catch (e: IOException) {
-            Log.d(MainActivity.TAG, "Error contacting backend server; ${e.message}")
+            Log.d(MainActivity.TAG, "Error contacting backend server; $e")
             _authErrors.emit(
                 Error("Error contacting backend server")
             )
@@ -188,7 +188,7 @@ class AuthViewModel : ViewModel() {
             handleResponse(response)
 
         } catch (e: IOException) {
-            Log.d(MainActivity.TAG, "Error contacting backend server; ${e.message}")
+            Log.d(MainActivity.TAG, "Error contacting backend server; $e")
             _authErrors.emit(
                 Error("Error contacting backend server")
             )
@@ -214,7 +214,7 @@ class AuthViewModel : ViewModel() {
             handleResponse(response)
 
         } catch (e: IOException) {
-            Log.d(MainActivity.TAG, "Error contacting backend server; ${e.message}")
+            Log.d(MainActivity.TAG, "Error contacting backend server; $e")
             _authErrors.emit(
                 Error("Error contacting backend server")
             )

@@ -1,6 +1,7 @@
 package com.example.araknet.data
 
 import android.app.Application
+import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
@@ -13,7 +14,6 @@ import com.example.araknet.utils.toRawString
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -25,7 +25,10 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Response
-import java.io.IOException
+import java.io.BufferedReader
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.io.InputStreamReader
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URI
@@ -46,13 +49,14 @@ data class ProxyServer(
 )
 
 fun ProxyServer.address(): String {
-    return "${this.host}:${this.port}"
+    return "${this.protocol}://${this.host}:${this.port}"
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
 class HomeScreenViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         val api: ApiService? = MainActivity.retrofitService
+        const val SELECT_PROXY_ACTION: String = "com.example.SELECT_PROXY_ACTION"
     }
 
     private val _proxyServers = MutableStateFlow<List<ProxyServer>>(listOf())
@@ -72,6 +76,55 @@ class HomeScreenViewModel(application: Application) : AndroidViewModel(applicati
     init {
         viewModelScope.launch {
             getProxyServers()
+        }
+    }
+
+    fun selectProxy(proxy: ProxyServer) {
+        viewModelScope.launch {
+            val isActive = testProxyConnection(proxy.host, proxy.port)
+            if (isActive) {
+                val (upSpeed, downSpeed) = measureSpeeds(proxy)
+
+                // Atomically update speed values
+                _proxyServers.update { list ->
+                    list.map { _proxyServer ->
+                        if (_proxyServer.id == proxy.id) {
+                            _proxyServer.copy(
+                                uploadSpeed = upSpeed.toFloat(),
+                                downloadSpeed = downSpeed.toFloat(),
+                                status = ProxyStatus.Connected,
+                            )
+                        } else {
+                            _proxyServer
+                        }
+                    }
+                }
+            } else {
+                _proxyServers.update { list ->
+                    list.map { _proxyServer ->
+                        if (_proxyServer.id == proxy.id) {
+                            _proxyServer.copy(
+                                status = ProxyStatus.Offline,
+                            )
+                        } else {
+                            _proxyServer
+                        }
+                    }
+                }
+
+                _errors.emit(
+                    Error("Proxy server ${proxy.id} is currently offline")
+                )
+            }
+
+            // Send broadcast to notify VPN service
+            Log.d(MainActivity.TAG, "Sending BROADCAST to select proxy server ${proxy.address()}")
+
+            val intent = Intent(SELECT_PROXY_ACTION)
+            intent.putExtra("proxy_address", proxy.address())
+
+            val context = getApplication<Application>().applicationContext
+            context.sendBroadcast(intent)
         }
     }
 
@@ -126,11 +179,11 @@ class HomeScreenViewModel(application: Application) : AndroidViewModel(applicati
 
             proxyServers.forEach { proxy ->
                 viewModelScope.launch(Dispatchers.IO) {
-                    // Changing proxy's host to a known static IP address
-                    val proxyUrl = URI(BuildConfig.REMOTE_URL)
-                    proxy.host = proxyUrl.host
+                    // Using static IP address. TODO: Change to dynamic IP address in production
+                    val remoteURL = URI(BuildConfig.REMOTE_URL)
+                    proxy.host = remoteURL.host
 
-                    val isAvailable = testProxyConnection(proxy)
+                    val isAvailable = testProxyConnection(proxy.host, proxy.port)
 
                     // Create proxy server object
                     val proxyServer = ProxyServer(
@@ -139,7 +192,7 @@ class HomeScreenViewModel(application: Application) : AndroidViewModel(applicati
                         host = proxy.host,
                         port = proxy.port,
                         ipInfo = proxy.ipInfo,
-                        status = if (isAvailable) ProxyStatus.Connecting else ProxyStatus.Offline,
+                        status = if (isAvailable) ProxyStatus.Online else ProxyStatus.Offline,
                     )
 
                     // Atomically update state
@@ -169,7 +222,7 @@ class HomeScreenViewModel(application: Application) : AndroidViewModel(applicati
 
 
         } catch (e: Exception) {
-            Log.d(MainActivity.TAG, "Error fetching proxy servers; ${e.message}")
+            Log.d(MainActivity.TAG, "Error fetching proxy servers; $e")
             _errors.emit(
                 Error(
                     message = "Backend server currently unreachable"
@@ -178,18 +231,18 @@ class HomeScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private suspend fun testProxyConnection(proxy: ProxyDto): Boolean {
+    private suspend fun testProxyConnection(proxyHost: String, proxyPort: Int): Boolean {
         return withContext(Dispatchers.IO) {
             try {
                 Socket().use { socket ->
                     socket.connect(
-                        InetSocketAddress(proxy.host, proxy.port),
+                        InetSocketAddress(proxyHost, proxyPort),
                         30000
                     )
                 }
                 true
             } catch (e: Exception) {
-                Log.d(MainActivity.TAG, "Error testing proxy connection; ${e.message}")
+                Log.d(MainActivity.TAG, "Error testing proxy connection; $e")
                 false
             }
         }
@@ -197,130 +250,177 @@ class HomeScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     @RequiresApi(Build.VERSION_CODES.O)
     private suspend fun measureSpeeds(proxy: ProxyServer): Pair<Double, Double> {
-        return try {
-            val targetUrl = URI(BuildConfig.REMOTE_URL)
-            val proxySocket: Socket = newSocks5Connection(
-                proxy.host, proxy.port,
-                targetUrl.host, targetUrl.port
-            )
+        return withContext(Dispatchers.IO) {
+            try {
+                Log.d(MainActivity.TAG, "Measuring proxy speeds for ${proxy.address()}")
 
-            // Ensure the socket remains open while measuring speeds
-            proxySocket.use { socket ->
-                socket.soTimeout = 10000 // 10s
+                val destination = URI(BuildConfig.REMOTE_URL)
+                val uploadDeferred = async { measureUploadSpeed(proxy, destination) }
+                val downloadDeferred = async { measureDownloadSpeed(proxy, destination) }
 
-                coroutineScope {
-                    val uploadDeferred = async { measureUploadSpeed(socket, targetUrl) }
-                    val downloadDeferred = async { measureDownloadSpeed(socket, targetUrl) }
+                // Await both results concurrently
+                val uploadSpeed = uploadDeferred.await()
+                val downloadSpeed = downloadDeferred.await()
 
-                    // Await both results concurrently
-                    val uploadSpeed = uploadDeferred.await()
-                    val downloadSpeed = downloadDeferred.await()
-
-                    return@coroutineScope uploadSpeed to downloadSpeed
-                }
+                return@withContext uploadSpeed to downloadSpeed
+            } catch (e: Exception) {
+                Log.d(
+                    MainActivity.TAG,
+                    "Error measuring upload/download speeds for ${proxy.address()}: $e",
+                )
+                0.0 to 0.0
             }
-        } catch (e: Exception) {
-            Log.d(
-                MainActivity.TAG,
-                "Error measuring upload/download speeds for ${proxy.address()}; ${e.message}"
-            )
-            0.0 to 0.0
         }
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private suspend fun measureUploadSpeed(proxySocket: Socket, targetUrl: URI): Double {
-        return withContext(Dispatchers.IO) {
+    private fun measureUploadSpeed(proxy: ProxyServer, dest: URI): Double {
+        try {
             Log.d(
                 MainActivity.TAG,
-                "Measuring upload speed for proxy server ${proxySocket.remoteSocketAddress}"
+                "Measuring upload speed for proxy server ${proxy.address()}"
             )
 
-            val uploadEndpoint: URI = targetUrl.resolve("/api/speed/upload")
-            val data = ByteArray(5 * 1024 * 1024) { 'A'.code.toByte() } // 5MB
-            val compressedData = compressData(data)
-            val b64EncodedData = java.util.Base64.getEncoder().encodeToString(compressedData)
+            // Connect to SOCKS proxy
+            val proxySocket: Socket = SOCKS5.newTCPConnection(
+                proxy.host, proxy.port,
+                dest.host, dest.port
+            )
 
-            val request = Request.Builder()
-                .url(uploadEndpoint.toURL())
-                .addHeader("Cookie", getCookies.joinToString("; ") { cookie ->
-                    "${cookie.name}=${cookie.value}"
-                })
-                .addHeader("Authorization", "Bearer ${BuildConfig.ANDROID_API_KEY}")
-                .addHeader("Content-Type", "application/octet-stream")
-                .addHeader("Content-Encoding", "gzip")
-                .post(
-                    b64EncodedData.toRequestBody(
-                        "application/octet-stream".toMediaType(),
+            proxySocket.use { socket ->
+                val uploadEndpoint: URI = dest.resolve("/api/speed/upload")
+                val data = ByteArray(5 * 1024 * 1024) { 'A'.code.toByte() } // 5MB
+                val compressedData = compressData(data)
+                val b64EncodedData = java.util.Base64.getEncoder().encodeToString(compressedData)
+
+                val request = Request.Builder()
+                    .url(uploadEndpoint.toURL())
+                    .addHeader("Cookie", getCookies.joinToString("; ") { cookie ->
+                        "${cookie.name}=${cookie.value}"
+                    })
+                    .addHeader("Authorization", "Bearer ${BuildConfig.ANDROID_API_KEY}")
+                    .addHeader("Content-Type", "application/octet-stream")
+                    .addHeader("Content-Encoding", "gzip")
+                    .addHeader("Connection", "close")
+                    .post(
+                        b64EncodedData.toRequestBody(
+                            "application/octet-stream".toMediaType(),
+                        )
                     )
-                )
-                .build()
+                    .build()
 
-            val timeMs = measureTimeMillis {
-                val inputStream = proxySocket.getInputStream()
-                val outputStream = proxySocket.getOutputStream()
+                val timeMs = measureTimeMillis {
+                    val proxyInputStream = socket.getInputStream()
+                    val proxyOutputStream = socket.getOutputStream()
 
-                val requestRawString = request.toRawString()
-                Log.d(MainActivity.TAG, "Upload request body:\n$requestRawString")
+                    val requestRawString = request.toRawString()
+                    Log.d(MainActivity.TAG, "Upload request body:\n$requestRawString")
 
-                outputStream.write(requestRawString.toByteArray())
-                outputStream.flush()
+                    proxyOutputStream.write(requestRawString.toByteArray())
+                    proxyOutputStream.flush()
 
-                try {
-                    // Read response sent by proxy until server closes connection
-                    val responseBytes = ByteArray(1 * 1024 * 1024) // 1MB
-                    inputStream.read(responseBytes)
+                    // Read response sent by proxy
+                    val buffer = ByteArray(1024)
+                    while (true) {
+                        val bytesRead = proxyInputStream.read(buffer)
+                        if (bytesRead == -1) break // Connection closed or EOF
+                    }
 
-                } catch(e: IOException) {
-                    Log.d(MainActivity.TAG, "Connection closed by proxy/server: ${e.message}")
-                }
-            }.toDouble()
+                }.toDouble()
 
-            // Convert bytes to Megabytes and ms to seconds
-            val megaBytes = (data.size * 8) / 1_000_000
-            val timeSec = timeMs / 1000
+                // Convert bytes to Megabytes and ms to seconds
+                val megaBytes = data.size / 1024 / 1024
+                val timeSec = timeMs / 1000
 
-            Log.d(MainActivity.TAG, "Uploaded $megaBytes MBs in $timeSec ms")
-            megaBytes / timeSec
+                Log.d(MainActivity.TAG, "Uploaded $megaBytes MBs in $timeSec s")
+                return megaBytes / timeSec
+            }
+
+        } catch (e: Exception) {
+            Log.e(MainActivity.TAG, "Error measuring upload speed; $e")
+            return 0.0
         }
     }
 
-    private suspend fun measureDownloadSpeed(proxySocket: Socket, targetUrl: URI): Double {
-        return withContext(Dispatchers.IO) {
+    private fun measureDownloadSpeed(proxy: ProxyServer, dest: URI): Double {
+        try {
             Log.d(
                 MainActivity.TAG,
-                "Measuring download speed for proxy server ${proxySocket.remoteSocketAddress}"
+                "Measuring download speed for proxy server ${proxy.address()}"
             )
 
-            val downloadEndpoint: URI = targetUrl.resolve("/api/speed/download")
-            val request = Request.Builder()
-                .url(downloadEndpoint.toURL())
-                .addHeader("Cookie", getCookies.joinToString("; ") { cookie ->
-                    "${cookie.name}=${cookie.value}"
-                })
-                .addHeader("Authorization", "Bearer ${BuildConfig.ANDROID_API_KEY}")
-                .addHeader("Accept-Encoding", "gzip")
-                .build()
+            // Connect to SOCKS proxy
+            val proxySocket: Socket = SOCKS5.newTCPConnection(
+                proxy.host, proxy.port,
+                dest.host, dest.port
+            )
 
-            val data = ByteArray(5 * 1024 * 1024) // 5MB
+            proxySocket.use { socket ->
+                val downloadEndpoint: URI = dest.resolve("/api/speed/download")
+                val request = Request.Builder()
+                    .url(downloadEndpoint.toURL())
+                    .addHeader("Cookie", getCookies.joinToString("; ") { cookie ->
+                        "${cookie.name}=${cookie.value}"
+                    })
+                    .addHeader("Authorization", "Bearer ${BuildConfig.ANDROID_API_KEY}")
+                    .addHeader("Accept-Encoding", "gzip")
+                    .addHeader("Connection", "close")
+                    .build()
 
-            val timeMs = measureTimeMillis {
-                val inputStream = proxySocket.getInputStream()
-                val outputStream = proxySocket.getOutputStream()
+                var totalBytesRead: Int
+                val timeMs = measureTimeMillis {
+                    val proxyInputStream = socket.getInputStream()
+                    val proxyOutputStream = socket.getOutputStream()
 
-                outputStream.write(request.toRawString().toByteArray())
-                outputStream.flush()
+                    proxyOutputStream.write(request.toRawString().toByteArray())
+                    proxyOutputStream.flush()
 
-                // Read response sent by proxy
-                inputStream.read(data)
-            }.toDouble()
+                    // Read response sent by proxy
+                    val responseBody = readHttpResponseBody(proxyInputStream)
+                    totalBytesRead = responseBody.size
+                }.toDouble()
 
-            // Convert bytes to Megabytes and ms to seconds
-            val megaBytes = (data.size * 8) / 1_000_000
-            val timeSec = timeMs / 1000
+                // Convert bytes to Megabytes and ms to seconds
+                val megaBytes = totalBytesRead / 1024 / 1024
+                val timeSec = timeMs / 1000
 
-            Log.d(MainActivity.TAG, "Downloaded $megaBytes MBs in $timeSec ms")
-            megaBytes / timeSec // Speed in MB/s
+                Log.d(MainActivity.TAG, "Downloaded $megaBytes MBs in $timeSec s")
+                return megaBytes / timeSec // Speed in MB/s
+            }
+
+        } catch (e: Exception) {
+            Log.e(MainActivity.TAG, "Error measuring download speed; $e")
+            return 0.0
         }
+    }
+
+    private fun readHttpResponseBody(inputStream: InputStream): ByteArray {
+        val reader = BufferedReader(InputStreamReader(inputStream))
+        val headers = mutableMapOf<String, String>()
+
+        // Read HTTP response headers
+        while (true) {
+            val line: String = reader.readLine() ?: break
+            if (line.isEmpty()) break // Headers end at empty line
+
+            val parts = line.split(": ", limit = 2)
+            if (parts.size == 2) {
+                headers[parts[0]] = parts[1]
+            }
+        }
+
+        Log.d(MainActivity.TAG, "Response Headers: $headers")
+
+        // Read raw data
+        val responseBody = ByteArrayOutputStream()
+        val buffer = ByteArray(10 * 1024) // 10Kb buffer
+
+        while (true) {
+            val bytesRead = inputStream.read(buffer)
+            if (bytesRead == -1) break // Connection closed or EOF
+            responseBody.write(buffer, 0, bytesRead)
+        }
+
+        return responseBody.toByteArray()
     }
 }

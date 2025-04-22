@@ -1,7 +1,10 @@
 package com.example.araknet
 
+import android.content.Intent
+import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -10,12 +13,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.araknet.data.ApiService
+import com.example.araknet.data.AraknetVpnService
 import com.example.araknet.data.NetworkMonitor
 import com.example.araknet.data.getRetrofitBuilder
 import com.example.araknet.screens.ForgotPasswordScreen
@@ -33,6 +38,26 @@ class MainActivity : ComponentActivity() {
         var retrofitService: ApiService? = null
     }
 
+    private val REQUEST_CODE_VPN = 1001
+
+    // Handling the result from the VPN preparation request
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_CODE_VPN) {
+            if (resultCode == RESULT_OK) {
+                // User has allowed VPN configuration, start the VPN service
+                startVpnService()
+            } else {
+                Toast.makeText(this, "VPN service permission denied", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun startVpnService() {
+        val vpnServiceIntent = Intent(this, AraknetVpnService::class.java)
+        startService(vpnServiceIntent)
+    }
+
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,6 +71,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             AraknetTheme {
                 val navController = rememberNavController()
+
+                val context = LocalContext.current
+                val intent = VpnService.prepare(context)
+                if (intent != null) {
+                    context.startActivity(intent) // Wait for result before starting VPN
+                } else {
+                    context.startService(Intent(context, AraknetVpnService::class.java))
+                }
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     NavHost(

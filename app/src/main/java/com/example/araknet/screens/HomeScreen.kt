@@ -2,7 +2,10 @@ package com.example.araknet.screens
 
 import android.annotation.SuppressLint
 import android.graphics.BlurMaskFilter
+import android.os.Build
+import android.widget.Toast
 import androidx.annotation.DrawableRes
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.InfiniteRepeatableSpec
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -11,6 +14,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -28,9 +32,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -44,6 +50,8 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -51,21 +59,43 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.araknet.R
+import com.example.araknet.data.Error
 import com.example.araknet.data.HomeScreenViewModel
+import com.example.araknet.screens.widgets.ErrorMessage
 import com.example.araknet.screens.widgets.NoItemsFound
 import com.example.araknet.ui.theme.AraknetTheme
-import com.example.araknet.ui.theme.connectingColor
 import com.example.araknet.ui.theme.onlineColor
+import com.example.araknet.ui.theme.connectedColor
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.round
 
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun HomeScreen(
     vpnViewModel: HomeScreenViewModel = viewModel()
 ) {
     val proxyServers by vpnViewModel.proxyServers.collectAsState()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var error by remember { mutableStateOf<Error?>(null) }
+
+    LaunchedEffect(Unit) {
+        vpnViewModel.errors.collectLatest { err ->
+            error = err
+
+            launch {
+                delay(5000)  // Hide after n seconds
+                error = null
+            }
+        }
+    }
+
+    error?.let{
+        Toast.makeText(context, it.message, Toast.LENGTH_LONG).show()
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -110,7 +140,11 @@ fun HomeScreen(
                 initialWidth = 256.dp,
                 onPressedWidth = 300.dp,
                 backgroundColor = currentProxyServer.status.primaryColor,
-                onPressed = {}
+                onPressed = {
+                    scope.launch {
+                        vpnViewModel.selectProxy(currentProxyServer)
+                    }
+                }
             )
 
             Row(
@@ -124,14 +158,14 @@ fun HomeScreen(
                     label = "Download",
                     icon = R.drawable.baseline_download_24,
                     speed = currentProxyServer.downloadSpeed,
-                    color = connectingColor,
+                    color = onlineColor,
                 )
 
                 BandwidthSection(
                     label = "Upload",
                     icon = R.drawable.baseline_upload_24,
                     speed = currentProxyServer.uploadSpeed,
-                    color = onlineColor,
+                    color = connectedColor,
                 )
             }
         }
@@ -147,11 +181,11 @@ fun PowerButton(
     onPressed: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
+    var isLongPressed by remember { mutableStateOf(false) }
 
     val animatedWidth by animateDpAsState(
-        targetValue = if (isPressed) onPressedWidth else initialWidth,
-        animationSpec = if (isPressed) {
+        targetValue = if (isLongPressed) onPressedWidth else initialWidth,
+        animationSpec = if (isLongPressed) {
             InfiniteRepeatableSpec(
                 animation = tween(durationMillis = 400),
                 repeatMode = RepeatMode.Reverse,
@@ -159,10 +193,6 @@ fun PowerButton(
         } else tween(durationMillis = 400),
         label = ""
     )
-
-    if (isPressed) {
-        onPressed()
-    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -181,7 +211,21 @@ fun PowerButton(
                 .combinedClickable(
                     interactionSource = interactionSource,
                     indication = null,
-                ) {},
+                ) {}
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onLongPress = {
+                            if (!isLongPressed) {
+                                isLongPressed = true
+                                onPressed()
+                            }
+                        },
+                        onPress = {
+                            isLongPressed = false // Reset so it can trigger again on the next long press
+                            tryAwaitRelease()
+                        }
+                    )
+                },
             contentAlignment = Alignment.Center
         ) {
             Image(
@@ -361,6 +405,7 @@ fun PingCounter(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Preview(showBackground = true)
 @Composable
 fun PreviewHomeScreen() {
